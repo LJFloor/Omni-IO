@@ -1595,6 +1595,16 @@ void setupWebServer() {
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
 
+  // Asset URLs carry a content hash (?v=, added by tools/build_web_data.py),
+  // so their content never changes and browsers may cache them for good.
+  // Everything else falls through to the handler below (no-cache + ETag).
+  auto &hashedStaticHandler =
+      server.serveStatic("/", LittleFS, "/web_interface_data/");
+  hashedStaticHandler.setCacheControl("public, max-age=31536000, immutable");
+  hashedStaticHandler.setFilter([](AsyncWebServerRequest *request) {
+    return request->hasParam("v") && !request->url().startsWith("/api");
+  });
+
   auto &staticHandler =
       server.serveStatic("/", LittleFS, "/web_interface_data/");
   staticHandler.setDefaultFile("index.html");
