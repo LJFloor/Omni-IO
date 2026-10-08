@@ -54,6 +54,15 @@ This guide provides solutions to common issues encountered during setup, WiFi co
   * Upload `*_filesystem.bin` via the Web UI OTA update, or
   * Using PlatformIO: run `pio run --target uploadfs`.
 
+### Device drops off the network while the Web UI loads
+* **Cause**: Many parallel requests (a browser loading the UI for the first time) can stall the ESP32 WiFi data path while it still reports connected (issue #8).
+* **Behavior**: A WiFi watchdog pings the gateway every 15 seconds and reconnects WiFi when it stops answering, so the device comes back within about 30 seconds.
+* **Caching**: After the first visit the browser caches the UI and only revalidates `index.html` and the language file, so later visits do not trigger it.
+
+### Editing the Web UI
+* Edit the readable sources in `extras/web_interface_data`. The build (`tools/build_web_data.py`) writes a minified, gzip-compressed copy to `.pio/web_data`, which is what `buildfs` and `uploadfs` put on the device.
+* Asset URLs get a content hash (`?v=...`) at build time, so browsers pick up changes without a manual cache clear.
+
 ---
 
 ## 5. Home Assistant MQTT Issues
