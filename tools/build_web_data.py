@@ -31,7 +31,7 @@ def minify_json(text):
 
 def minify_html(text):
     text = re.sub(r"<!--(?!\[if).*?-->", "", text, flags=re.S)
-    text = re.sub(r">\s+<", "><", text)
+    text = re.sub(r">\s+<", "> <", text)
     text = re.sub(r"\s{2,}", " ", text)
     return text.strip() + "\n"
 
