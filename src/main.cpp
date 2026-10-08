@@ -42,6 +42,7 @@
 #include <esphome_server.h>
 #endif
 #include <wifi_helper.h>
+#include <wifi_watchdog.h>
 #include <nvs_helpers.h>
 #include "log_buffer.h"
 #include <stdarg.h>
@@ -300,6 +301,7 @@ void setup() {
 
     // Initialize network services after devices are ready
     initWifi();
+    startWifiWatchdog();
 #if defined(MQTT)
     initMqtt();
 #endif
