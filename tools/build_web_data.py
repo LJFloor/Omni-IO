@@ -1,5 +1,8 @@
+import gzip
+import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
 import time
@@ -21,6 +24,12 @@ else:
 SOURCE_DIR = PROJECT_DIR / "extras"
 OUTPUT_DIR = PROJECT_DIR / ".pio" / "web_data"
 LOCK_FILE = PROJECT_DIR / ".pio" / "web_data.lock"
+
+# The web UI is stored gzip-compressed only; asset URLs get a content hash
+# (?v=) so the web server can let browsers cache them indefinitely.
+WEB_DIR = "web_interface_data"
+ASSET_REF = re.compile(r'(\s(?:href|src)=")((?:css|js|img)/[^"]+)"')
+CSS_URL = re.compile(r"""url\(\s*["']?([^"')]+)["']?\s*\)""")
 
 
 def minify_json(text):
@@ -74,6 +83,37 @@ def transform_file(source, target):
     target.write_text(output, encoding="utf-8", newline="\n")
 
 
+def gzip_web_interface(web_dir):
+    # Referenced files first: CSS references images, HTML references all.
+    order = {".css": 1, ".html": 2}
+    files = sorted(
+        (path for path in web_dir.rglob("*") if path.is_file()),
+        key=lambda path: (order.get(path.suffix.lower(), 0), path.as_posix()),
+    )
+    versions = {}
+
+    def versioned(from_rel, ref):
+        clean = ref.split("?", 1)[0]
+        target = posixpath.normpath(posixpath.join(posixpath.dirname(from_rel), clean))
+        if target not in versions:
+            raise ValueError(f"{from_rel}: unknown asset {ref}")
+        return f"{clean}?v={versions[target]}"
+
+    for path in files:
+        rel = path.relative_to(web_dir).as_posix()
+        data = path.read_bytes()
+        suffix = path.suffix.lower()
+        if suffix == ".css":
+            text = CSS_URL.sub(lambda m: f"url({versioned(rel, m.group(1))})", data.decode("utf-8"))
+            data = text.encode("utf-8")
+        elif suffix == ".html":
+            text = ASSET_REF.sub(lambda m: f'{m.group(1)}{versioned(rel, m.group(2))}"', data.decode("utf-8"))
+            data = text.encode("utf-8")
+        versions[rel] = hashlib.sha256(data).hexdigest()[:8]
+        path.with_name(path.name + ".gz").write_bytes(gzip.compress(data, compresslevel=9, mtime=0))
+        path.unlink()
+
+
 def build_web_data():
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
     lock_fd = None
@@ -109,6 +149,9 @@ def build_web_data():
             source_bytes += source.stat().st_size
             transform_file(source, target)
             copied += 1
+
+        if (OUTPUT_DIR / WEB_DIR).is_dir():
+            gzip_web_interface(OUTPUT_DIR / WEB_DIR)
 
         output_bytes = sum(
             path.stat().st_size for path in OUTPUT_DIR.rglob("*") if path.is_file()
